@@ -53,7 +53,7 @@ function extractImagesFromContent(content) {
 
   return result;
 }
-function handleUserMessage(extracted, antigravityMessages){
+function handleUserMessage(extracted, antigravityMessages) {
   antigravityMessages.push({
     role: "user",
     parts: [
@@ -64,11 +64,11 @@ function handleUserMessage(extracted, antigravityMessages){
     ]
   })
 }
-function handleAssistantMessage(message, antigravityMessages){
+function handleAssistantMessage(message, antigravityMessages) {
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
   const hasContent = message.content && message.content.trim() !== '';
-  
+
   const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => ({
     functionCall: {
       id: toolCall.id,
@@ -78,21 +78,35 @@ function handleAssistantMessage(message, antigravityMessages){
       }
     }
   })) : [];
-  
-  if (lastMessage?.role === "model" && hasToolCalls && !hasContent){
+
+  if (lastMessage?.role === "model" && hasToolCalls && !hasContent) {
     lastMessage.parts.push(...antigravityTools)
-  }else{
+  } else {
     const parts = [];
-    if (hasContent) parts.push({ text: message.content });
+    if (hasContent) {
+      let text = message.content;
+      let thoughtSignature = null;
+      const signatureMatch = text.match(/<!-- thought_signature: (.+?) -->/);
+      if (signatureMatch) {
+        thoughtSignature = signatureMatch[1];
+        text = text.replace(signatureMatch[0], '').trim();
+      }
+
+      const part = { text };
+      if (thoughtSignature) {
+        part.thought_signature = thoughtSignature;
+      }
+      parts.push(part);
+    }
     parts.push(...antigravityTools);
-    
+
     antigravityMessages.push({
       role: "model",
       parts
     })
   }
 }
-function handleToolCall(message, antigravityMessages){
+function handleToolCall(message, antigravityMessages) {
   // 从之前的 model 消息中找到对应的 functionCall name
   let functionName = '';
   for (let i = antigravityMessages.length - 1; i >= 0; i--) {
@@ -107,7 +121,7 @@ function handleToolCall(message, antigravityMessages){
       if (functionName) break;
     }
   }
-  
+
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const functionResponse = {
     functionResponse: {
@@ -118,7 +132,7 @@ function handleToolCall(message, antigravityMessages){
       }
     }
   };
-  
+
   // 如果上一条消息是 user 且包含 functionResponse，则合并
   if (lastMessage?.role === "user" && lastMessage.parts.some(p => p.functionResponse)) {
     lastMessage.parts.push(functionResponse);
@@ -129,7 +143,7 @@ function handleToolCall(message, antigravityMessages){
     });
   }
 }
-function openaiMessageToAntigravity(openaiMessages){
+function openaiMessageToAntigravity(openaiMessages) {
   const antigravityMessages = [];
   for (const message of openaiMessages) {
     if (message.role === "user" || message.role === "system") {
@@ -141,10 +155,10 @@ function openaiMessageToAntigravity(openaiMessages){
       handleToolCall(message, antigravityMessages);
     }
   }
-  
+
   return antigravityMessages;
 }
-function generateGenerationConfig(parameters, enableThinking, actualModelName){
+function generateGenerationConfig(parameters, enableThinking, actualModelName) {
   const generationConfig = {
     topP: parameters.top_p ?? config.defaults.top_p,
     topK: parameters.top_k ?? config.defaults.top_k,
@@ -157,20 +171,24 @@ function generateGenerationConfig(parameters, enableThinking, actualModelName){
       "<|context_request|>",
       "<|endoftext|>",
       "<|end_of_turn|>"
-    ],
-    thinkingConfig: {
-      includeThoughts: enableThinking,
-      thinkingBudget: enableThinking ? 1024 : 0
-    }
+    ]
   }
-  if (enableThinking && actualModelName.includes("claude")){
+
+  if (enableThinking) {
+    generationConfig.thinkingConfig = {
+      includeThoughts: true,
+      thinkingBudget: 1024
+    };
+  }
+
+  if (enableThinking && actualModelName.includes("claude")) {
     delete generationConfig.topP;
   }
   return generationConfig
 }
-function convertOpenAIToolsToAntigravity(openaiTools){
+function convertOpenAIToolsToAntigravity(openaiTools) {
   if (!openaiTools || openaiTools.length === 0) return [];
-  return openaiTools.map((tool)=>{
+  return openaiTools.map((tool) => {
     delete tool.function.parameters.$schema;
     return {
       functionDeclarations: [
@@ -183,15 +201,16 @@ function convertOpenAIToolsToAntigravity(openaiTools){
     }
   })
 }
-function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
-  const enableThinking = modelName.endsWith('-thinking') || 
-    modelName === 'gemini-2.5-pro' || 
+function generateRequestBody(openaiMessages, modelName, parameters, openaiTools) {
+  const enableThinking = modelName.endsWith('-thinking') ||
+    modelName === 'gemini-2.5-pro' ||
+    modelName === 'gemini-2.5-pro-image' ||
     modelName.startsWith('gemini-3-pro-') ||
     modelName === "rev19-uic3-1p" ||
     modelName === "gpt-oss-120b-medium"
   const actualModelName = modelName.endsWith('-thinking') ? modelName.slice(0, -9) : modelName;
-  
-  return{
+
+  return {
     project: generateProjectId(),
     requestId: generateRequestId(),
     request: {
@@ -213,7 +232,7 @@ function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
     userAgent: "antigravity"
   }
 }
-export{
+export {
   generateRequestId,
   generateSessionId,
   generateProjectId,

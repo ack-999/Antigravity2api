@@ -3,13 +3,13 @@ import config from '../config/config.js';
 
 export async function generateAssistantResponse(requestBody, callback) {
   const token = await tokenManager.getToken();
-  
+
   if (!token) {
     throw new Error('没有可用的token，请运行 npm run login 获取token');
   }
-  
+
   const url = config.api.url;
-  
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -39,10 +39,10 @@ export async function generateAssistantResponse(requestBody, callback) {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    
+
     const chunk = decoder.decode(value);
     const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
-    
+
     for (const line of lines) {
       const jsonStr = line.slice(6);
       try {
@@ -50,6 +50,7 @@ export async function generateAssistantResponse(requestBody, callback) {
         const parts = data.response?.candidates?.[0]?.content?.parts;
         if (parts) {
           for (const part of parts) {
+            console.log('Debug - Part:', JSON.stringify(part, null, 2));
             if (part.thought === true) {
               if (!thinkingStarted) {
                 callback({ type: 'thinking', content: '<think>\n' });
@@ -61,7 +62,20 @@ export async function generateAssistantResponse(requestBody, callback) {
                 callback({ type: 'thinking', content: '\n</think>\n' });
                 thinkingStarted = false;
               }
-              callback({ type: 'text', content: part.text });
+              let content = part.text || '';
+              if (part.thought_signature) {
+                content += `\n<!-- thought_signature: ${part.thought_signature} -->`;
+              }
+
+              if (part.inlineData) {
+                const mimeType = part.inlineData.mimeType;
+                const data = part.inlineData.data;
+                content += `\n![Generated Image](data:${mimeType};base64,${data})`;
+              }
+
+              if (content) {
+                callback({ type: 'text', content: content });
+              }
             } else if (part.functionCall) {
               toolCalls.push({
                 id: part.functionCall.id,
@@ -74,7 +88,7 @@ export async function generateAssistantResponse(requestBody, callback) {
             }
           }
         }
-        
+
         // 当遇到 finishReason 时，发送所有收集的工具调用
         if (data.response?.candidates?.[0]?.finishReason && toolCalls.length > 0) {
           if (thinkingStarted) {
@@ -93,11 +107,11 @@ export async function generateAssistantResponse(requestBody, callback) {
 
 export async function getAvailableModels() {
   const token = await tokenManager.getToken();
-  
+
   if (!token) {
     throw new Error('没有可用的token，请运行 npm run login 获取token');
   }
-  
+
   const response = await fetch(config.api.modelsUrl, {
     method: 'POST',
     headers: {
@@ -111,7 +125,7 @@ export async function getAvailableModels() {
   });
 
   const data = await response.json();
-  
+
   return {
     object: 'list',
     data: Object.keys(data.models).map(id => ({
