@@ -17,6 +17,7 @@ function generateProjectId() {
   const randomNum = Math.random().toString(36).substring(2, 7);
   return `${randomAdj}-${randomNoun}-${randomNum}`;
 }
+
 function extractImagesFromContent(content) {
   const result = { text: '', images: [] };
 
@@ -53,6 +54,7 @@ function extractImagesFromContent(content) {
 
   return result;
 }
+
 function handleUserMessage(extracted, antigravityMessages) {
   antigravityMessages.push({
     role: "user",
@@ -64,6 +66,7 @@ function handleUserMessage(extracted, antigravityMessages) {
     ]
   })
 }
+
 function handleAssistantMessage(message, antigravityMessages) {
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
@@ -118,6 +121,7 @@ function handleAssistantMessage(message, antigravityMessages) {
     })
   }
 }
+
 function handleToolCall(message, antigravityMessages) {
   // 从之前的 model 消息中找到对应的 functionCall name
   let functionName = '';
@@ -155,6 +159,7 @@ function handleToolCall(message, antigravityMessages) {
     });
   }
 }
+
 function openaiMessageToAntigravity(openaiMessages) {
   const antigravityMessages = [];
   for (const message of openaiMessages) {
@@ -170,6 +175,7 @@ function openaiMessageToAntigravity(openaiMessages) {
 
   return antigravityMessages;
 }
+
 function generateGenerationConfig(parameters, enableThinking, actualModelName) {
   const generationConfig = {
     topP: parameters.top_p ?? config.defaults.top_p,
@@ -198,6 +204,7 @@ function generateGenerationConfig(parameters, enableThinking, actualModelName) {
   }
   return generationConfig
 }
+
 function convertOpenAIToolsToAntigravity(openaiTools) {
   if (!openaiTools || openaiTools.length === 0) return [];
   return openaiTools.map((tool) => {
@@ -213,6 +220,7 @@ function convertOpenAIToolsToAntigravity(openaiTools) {
     }
   })
 }
+
 const idCache = new Map();
 const SESSION_ID_DURATION = 60 * 60 * 1000; // 1 hour
 const PROJECT_ID_DURATION = 12 * 60 * 60 * 1000; // 12 hours
@@ -252,7 +260,12 @@ function generateRequestBody(openaiMessages, modelName, parameters, openaiTools,
     modelName.startsWith('gemini-3-pro-') ||
     modelName === "rev19-uic3-1p" ||
     modelName === "gpt-oss-120b-medium"
-  const actualModelName = modelName.endsWith('-thinking') ? modelName.slice(0, -9) : modelName;
+  
+  // 修改后的逻辑：排除 claude-opus-4-5-thinking
+  let actualModelName = modelName;
+  if (modelName.endsWith('-thinking') && modelName !== 'claude-opus-4-5-thinking') {
+    actualModelName = modelName.slice(0, -9);
+  }
 
   // Use a default key if none provided (though it should be provided by the server)
   const cacheKey = apiKey || 'default';
@@ -280,6 +293,7 @@ function generateRequestBody(openaiMessages, modelName, parameters, openaiTools,
     userAgent: "antigravity"
   }
 }
+
 export {
   generateRequestId,
   generateSessionId,
